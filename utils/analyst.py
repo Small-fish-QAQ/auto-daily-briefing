@@ -57,6 +57,8 @@ class GeminiChief:
             "\n".join(
                 [
                     f"[{item['origin']}] {item['title']}",
+                    f"分类：{item.get('category') or '其他'}",
+                    f"本地评分：{item.get('score') or '未知'}",
                     f"发布时间：{item.get('published') or '未知'}",
                     f"摘要：{item['digest'][:300]}",
                     f"Link: {item['url']}",

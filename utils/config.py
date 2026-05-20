@@ -18,6 +18,7 @@ DEFAULT_HISTORY_FILE: Final[str] = "utils/history.txt"
 DEFAULT_HISTORY_CAPACITY: Final[int] = 500
 DEFAULT_LIMIT_PER_SOURCE: Final[int] = 15
 DEFAULT_TOP_N: Final[int] = 10
+DEFAULT_CANDIDATE_LIMIT: Final[int] = 24
 DEFAULT_MODEL: Final[str] = "gemini-2.5-flash"
 DEFAULT_OUTPUT_DIR: Final[str] = "每日简报"
 DEFAULT_REPORT_PREFIX: Final[str] = "精选简报"
@@ -27,6 +28,36 @@ DEFAULT_ADVICE_LABEL: Final[str] = "技术观察"
 DEFAULT_AUDIENCE: Final[str] = "关注科技与产业动态的读者"
 DEFAULT_TONE: Final[str] = "客观、克制、少口号，优先事实和可执行建议"
 DEFAULT_CONFIG_FILE: Final[str] = "briefing_config.json"
+DEFAULT_INCLUDE_KEYWORDS: Final[list[str]] = [
+    "AI",
+    "Agent",
+    "大模型",
+    "开源",
+    "编程",
+    "开发者",
+    "芯片",
+    "操作系统",
+    "安全",
+    "机器人",
+    "云计算",
+]
+DEFAULT_EXCLUDE_KEYWORDS: Final[list[str]] = [
+    "明星",
+    "综艺",
+    "餐饮",
+    "门店",
+    "房价",
+    "楼市",
+    "股价",
+]
+DEFAULT_SOURCE_WEIGHTS: Final[dict[str, int]] = {}
+DEFAULT_CATEGORY_KEYWORDS: Final[dict[str, list[str]]] = {
+    "AI": ["AI", "Agent", "大模型", "模型", "智能体", "机器人"],
+    "开发工具": ["编程", "开发者", "开源", "代码", "GitHub", "操作系统"],
+    "硬件": ["芯片", "半导体", "处理器", "服务器", "存储", "GPU"],
+    "安全": ["安全", "漏洞", "攻击", "隐私", "泄露", "加密"],
+    "商业": ["融资", "IPO", "收购", "营收", "财报", "投资"],
+}
 
 
 @dataclass(frozen=True)
@@ -40,6 +71,11 @@ class BriefingConfig:
     report_title: str
     limit_per_source: int
     top_n: int
+    candidate_limit: int
+    include_keywords: list[str]
+    exclude_keywords: list[str]
+    source_weights: dict[str, int]
+    category_keywords: dict[str, list[str]]
     style_role: str
     advice_label: str
     audience: str
@@ -108,6 +144,73 @@ def _config_int(
     return parsed
 
 
+def _config_string_list(
+    section: dict[str, object],
+    name: str,
+    default: list[str],
+) -> list[str]:
+    value = section.get(name)
+    if value is None:
+        return list(default)
+    if not isinstance(value, list):
+        raise ValueError(f"配置项 {name} 必须是字符串数组。")
+
+    result = [str(item).strip() for item in value if str(item).strip()]
+    return result
+
+
+def _config_int_dict(
+    section: dict[str, object],
+    name: str,
+    default: dict[str, int],
+) -> dict[str, int]:
+    value = section.get(name)
+    if value is None:
+        return dict(default)
+    if not isinstance(value, dict):
+        raise ValueError(f"配置项 {name} 必须是对象。")
+
+    result: dict[str, int] = {}
+    for key, raw_weight in value.items():
+        source_name = str(key).strip()
+        if not source_name:
+            continue
+        try:
+            result[source_name] = int(raw_weight)
+        except (TypeError, ValueError) as error:
+            raise ValueError(f"配置项 {name}.{source_name} 必须是整数。") from error
+
+    return result
+
+
+def _config_string_list_dict(
+    section: dict[str, object],
+    name: str,
+    default: dict[str, list[str]],
+) -> dict[str, list[str]]:
+    value = section.get(name)
+    if value is None:
+        return {key: list(items) for key, items in default.items()}
+    if not isinstance(value, dict):
+        raise ValueError(f"配置项 {name} 必须是对象。")
+
+    result: dict[str, list[str]] = {}
+    for key, raw_items in value.items():
+        category = str(key).strip()
+        if not category:
+            continue
+        if not isinstance(raw_items, list):
+            raise ValueError(f"配置项 {name}.{category} 必须是字符串数组。")
+        items = [str(item).strip() for item in raw_items if str(item).strip()]
+        if items:
+            result[category] = items
+
+    if not result:
+        raise ValueError(f"配置项 {name} 至少需要一个有效分类。")
+
+    return result
+
+
 def _env_int(name: str, default: int, minimum: int = 1) -> int:
     raw_value = os.getenv(name)
     if raw_value is None or not raw_value.strip():
@@ -174,6 +277,7 @@ def load_config() -> BriefingConfig:
     history = _section(config_data, "history")
     output = _section(config_data, "output")
     selection = _section(config_data, "selection")
+    filtering = _section(config_data, "filtering")
     style = _section(config_data, "style")
 
     return BriefingConfig(
@@ -206,6 +310,30 @@ def load_config() -> BriefingConfig:
         top_n=_env_int(
             "BRIEFING_TOP_N",
             _config_int(selection, "top_n", DEFAULT_TOP_N),
+        ),
+        candidate_limit=_env_int(
+            "BRIEFING_CANDIDATE_LIMIT",
+            _config_int(selection, "candidate_limit", DEFAULT_CANDIDATE_LIMIT),
+        ),
+        include_keywords=_config_string_list(
+            filtering,
+            "include_keywords",
+            DEFAULT_INCLUDE_KEYWORDS,
+        ),
+        exclude_keywords=_config_string_list(
+            filtering,
+            "exclude_keywords",
+            DEFAULT_EXCLUDE_KEYWORDS,
+        ),
+        source_weights=_config_int_dict(
+            filtering,
+            "source_weights",
+            DEFAULT_SOURCE_WEIGHTS,
+        ),
+        category_keywords=_config_string_list_dict(
+            filtering,
+            "category_keywords",
+            DEFAULT_CATEGORY_KEYWORDS,
         ),
         style_role=_env_text(
             "BRIEFING_STYLE_ROLE",

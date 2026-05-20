@@ -10,6 +10,7 @@ from utils.analyst import GeminiChief
 from utils.archiver import ArchiveMaster
 from utils.config import load_config
 from utils.collector import IntelligenceCollector
+from utils.filter import FilterConfig, NewsFilter
 from utils.memory import MemoryBank
 
 load_dotenv()
@@ -45,6 +46,15 @@ def run_daily_briefing() -> int:
             "tone": config.tone,
         },
     )
+    news_filter = NewsFilter(
+        FilterConfig(
+            candidate_limit=config.candidate_limit,
+            include_keywords=config.include_keywords,
+            exclude_keywords=config.exclude_keywords,
+            source_weights=config.source_weights,
+            category_keywords=config.category_keywords,
+        )
+    )
 
     print("正在抓取 RSS 源...")
     raw_items = collector.scan(limit_per_source=config.limit_per_source)
@@ -56,8 +66,17 @@ def run_daily_briefing() -> int:
         print(f"未发现新内容，本次共扫描 {len(raw_items)} 条，跳过摘要生成。")
         return 0
 
-    print(f"开始生成日报：共扫描 {len(raw_items)} 条，新增 {len(fresh_items)} 条。")
-    report = analyst.summarize(fresh_items)
+    candidate_items = news_filter.select(fresh_items)
+    if not candidate_items:
+        print(f"未筛选出有效候选内容，本次新增 {len(fresh_items)} 条。")
+        return 0
+
+    print(
+        "开始生成日报："
+        f"共扫描 {len(raw_items)} 条，新增 {len(fresh_items)} 条，"
+        f"筛选候选 {len(candidate_items)} 条。"
+    )
+    report = analyst.summarize(candidate_items)
 
     archived_path = ArchiveMaster.store(
         report,

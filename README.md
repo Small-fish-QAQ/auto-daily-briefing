@@ -2,7 +2,7 @@
 
 一个基于 **RSS + Gemini + GitHub Actions** 的自动化日报项目。
 
-它会定时抓取多个 RSS 源，过滤历史已处理内容，调用 Gemini 生成 Markdown 日报，并把结果按日期归档到仓库中。项目目标不是做成重平台，而是保持 **小而清晰、能长期自动跑** 的 `v0.1` 版本。
+它会定时抓取多个 RSS 源，过滤历史已处理内容，先做本地候选筛选与排序，再调用 Gemini 生成 Markdown 日报，并把结果按日期归档到仓库中。项目目标不是做成重平台，而是保持 **小而清晰、能长期自动跑** 的 `v0.3` 版本。
 
 ---
 
@@ -19,10 +19,10 @@
 ## 核心流程
 
 ```text
-+-------------+    +-------------+    +-------------+    +---------------+    +-------------+    +-------------+
-| Actions 定时 | -> | RSS 抓取     | -> | 历史去重     | -> | Gemini 生成摘要 | -> | Markdown 归档 | -> | 提交回仓库   |
-| / 手动触发   |    | collector   |    | memory      |    | analyst       |    | archiver    |    | git push    |
-+-------------+    +-------------+    +-------------+    +---------------+    +-------------+    +-------------+
++-------------+    +-------------+    +-------------+    +----------------+    +---------------+    +-------------+    +-------------+
+| Actions 定时 | -> | RSS 抓取     | -> | 历史去重     | -> | 候选筛选 / 排序   | -> | Gemini 生成摘要 | -> | Markdown 归档 | -> | 提交回仓库   |
+| / 手动触发   |    | collector   |    | memory      |    | filter         |    | analyst       |    | archiver    |    | git push    |
++-------------+    +-------------+    +-------------+    +----------------+    +---------------+    +-------------+    +-------------+
 ```
 
 ---
@@ -39,6 +39,7 @@
 │  ├─ archiver.py
 │  ├─ config.py
 │  ├─ collector.py
+│  ├─ filter.py
 │  ├─ history.txt                    # 初始为空，运行后自动更新
 │  ├─ memory.py
 │  └─ validator.py
@@ -266,7 +267,40 @@ utils/history.txt
   },
   "selection": {
     "limit_per_source": 15,
-    "top_n": 10
+    "top_n": 10,
+    "candidate_limit": 24
+  },
+  "filtering": {
+    "include_keywords": [
+      "AI",
+      "Agent",
+      "大模型",
+      "开源",
+      "编程",
+      "开发者",
+      "芯片",
+      "操作系统",
+      "安全",
+      "机器人",
+      "云计算"
+    ],
+    "exclude_keywords": [
+      "明星",
+      "综艺",
+      "餐饮",
+      "门店",
+      "房价",
+      "楼市",
+      "股价"
+    ],
+    "source_weights": {},
+    "category_keywords": {
+      "AI": ["AI", "Agent", "大模型", "模型", "智能体", "机器人"],
+      "开发工具": ["编程", "开发者", "开源", "代码", "GitHub", "操作系统"],
+      "硬件": ["芯片", "半导体", "处理器", "服务器", "存储", "GPU"],
+      "安全": ["安全", "漏洞", "攻击", "隐私", "泄露", "加密"],
+      "商业": ["融资", "IPO", "收购", "营收", "财报", "投资"]
+    }
   },
   "history": {
     "file": "utils/history.txt",
@@ -286,6 +320,24 @@ utils/history.txt
 }
 ```
 
+### 筛选与偏好配置
+
+日报生成前会先在本地对 RSS 新内容做一次轻量筛选，再把候选新闻交给 Gemini。
+
+可重点调整这些字段：
+
+| 配置项 | 作用 |
+|---|---|
+| `selection.limit_per_source` | 每个 RSS 源最多抓取多少条 |
+| `selection.candidate_limit` | 本地筛选后最多交给 Gemini 的候选条数 |
+| `selection.top_n` | Gemini 最终写入日报的条数 |
+| `filtering.include_keywords` | 命中后加分，适合放你更关注的主题 |
+| `filtering.exclude_keywords` | 命中后扣分，适合放你不想频繁看到的主题 |
+| `filtering.source_weights` | 按来源整体加分或扣分，例如让某个 RSS 源优先级更高 |
+| `filtering.category_keywords` | 用关键词给新闻打分类标签，辅助 Gemini 判断内容类型 |
+
+例如，如果希望日报更偏 AI、开发工具、芯片和安全，可以把相关词加入 `include_keywords`；如果不想让娱乐、地产、股价快讯占位，可以放入 `exclude_keywords`。
+
 ### 环境变量
 
 | 变量名 | 是否必填 | 说明 |
@@ -296,6 +348,7 @@ utils/history.txt
 | `BRIEFING_SOURCES_JSON` | 否 | 覆盖默认 RSS 源，格式为 JSON 对象，例如 `{"来源":"https://example.com/feed.xml"}` |
 | `BRIEFING_LIMIT_PER_SOURCE` | 否 | 每个 RSS 源最多抓取条数，默认 `15` |
 | `BRIEFING_TOP_N` | 否 | Gemini 精选输出条数，默认 `10` |
+| `BRIEFING_CANDIDATE_LIMIT` | 否 | 进入 Gemini 前的候选新闻上限，默认 `24` |
 | `BRIEFING_HISTORY_FILE` | 否 | 历史去重文件路径，默认 `utils/history.txt` |
 | `BRIEFING_HISTORY_CAPACITY` | 否 | 历史链接保留上限，默认 `500` |
 | `BRIEFING_OUTPUT_DIR` | 否 | 日报输出目录，默认 `每日简报` |
@@ -329,6 +382,7 @@ utils/history.txt
 - 依赖 RSS 源质量，源站摘要不完整时会影响输入质量。
 - Gemini 摘要仍未做事实核验，当前只做格式和链接层面的质量门禁。
 - 摘要风格已改为中性默认值，并支持通过配置文件调整，但还不是完整模板系统。
+- 本地筛选只是启发式打分，不能完全替代人工选题或事实判断。
 - 目前抓取和分析流程仍是串行的，优先保证简单可维护。
 - RSS 抓取已有源级失败隔离，但还没有做并行抓取、缓存和更细粒度的内容正文抽取。
 
@@ -343,6 +397,7 @@ utils/history.txt
 - [x] 失败重试与 fallback 简报
 - [x] 运行配置化
 - [x] 日报格式质量门禁
+- [x] 本地新闻候选筛选
 - [ ] 扩展更多 RSS / 信息源
 - [ ] 支持飞书推送
 - [ ] 支持 Telegram / 邮件推送
