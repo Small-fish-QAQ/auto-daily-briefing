@@ -11,7 +11,7 @@
 - **小而完整**：没有重型框架，核心链路短，适合个人维护。
 - **自动闭环**：抓取、去重、摘要、归档、提交已串起来。
 - **部署轻**：直接跑在 GitHub Actions 上，无需数据库或常驻服务。
-- **输出稳定**：保留当前日报风格，不强行抹平个人表达。
+- **输出稳定**：默认采用中性开源风格，也可以按目标读者自定义输出口吻。
 - **可持续**：Gemini 高峰期失败时支持重试与 fallback，不至于当天完全断档。
 
 ---
@@ -37,9 +37,12 @@
 ├─ utils/
 │  ├─ analyst.py
 │  ├─ archiver.py
+│  ├─ config.py
 │  ├─ collector.py
 │  ├─ history.txt                    # 初始为空，运行后自动更新
-│  └─ memory.py
+│  ├─ memory.py
+│  └─ validator.py
+├─ briefing_config.example.json
 ├─ 每日简报/
 │  └─ 2026/04/
 │     └─ 2026-04-16-精选简报.md      # 示例输出
@@ -137,7 +140,7 @@ pip install -r requirements.txt
 
 ---
 
-### 3. 配置本地环境变量
+### 3. 配置本地环境变量和运行配置
 
 复制 `.env.example` 为 `.env`，然后填写你的 Gemini API Key。
 
@@ -146,7 +149,10 @@ pip install -r requirements.txt
 ```env
 GEMINI_API_KEY=your_api_key_here
 GEMINI_MODEL=gemini-2.5-flash
+# BRIEFING_CONFIG_FILE=briefing_config.json
 ```
+
+然后按需复制 `briefing_config.example.json` 为 `briefing_config.json`，集中配置 RSS 源、抓取条数、输出目录、日报标题和摘要风格。这个文件不是必需的；不存在时程序会使用内置默认值。配置文件不应写入 API Key，且默认已被 `.gitignore` 排除，适合存放个人运行偏好。
 
 > [!WARNING]
 > `.env` 仅用于本地调试，请不要提交到 GitHub。
@@ -159,6 +165,7 @@ GEMINI_MODEL=gemini-2.5-flash
 
 - `GEMINI_API_KEY`：必填
 - `GEMINI_MODEL`：可选
+- `BRIEFING_CONFIG_FILE`：可选，默认尝试读取 `briefing_config.json`
 - 如果你**不填写** `GEMINI_MODEL`，程序会自动回退到默认模型：
 
 ```text
@@ -184,8 +191,6 @@ python main.py
 ```text
 utils/history.txt
 ```
-
----
 
 ## 为什么适合部署在 GitHub Actions
 
@@ -213,6 +218,8 @@ utils/history.txt
 - fallback 简报至少保留：
   - 来源
   - 标题
+  - 发布时间
+  - RSS 摘要
   - 原文链接
 - fallback 简报仍会按原有目录结构归档，随后继续更新 `history.txt`，避免第二天重复处理同一批内容。
 
@@ -225,7 +232,7 @@ utils/history.txt
 - 源码、workflow、历史去重文件、日报 Markdown 都放在同一个仓库中。
 - 这样做的主要目的，是简化 GitHub Actions 的提交逻辑、归档逻辑和展示链路。
 - 对 `v0.1` 来说，这比拆分产物仓库或引入对象存储更稳妥，也更易维护。
-- 为了让公开仓库更适合阅读和 fork，当前默认只保留少量示例产物；实际运行后的历史日报会随着工作流执行继续累积。
+- 当前仓库已经保留一批历史日报作为真实输出样例；实际运行后，新的日报会继续按日期累积。
 
 如果后续历史日报规模继续扩大，再考虑：
 
@@ -238,22 +245,76 @@ utils/history.txt
 
 ---
 
-## 环境变量
+## 配置方式
+
+运行配置优先级如下：
+
+```text
+内置默认值 < briefing_config.json < 环境变量
+```
+
+推荐把个人运行参数放在本地 `briefing_config.json` 中，把公开默认值维护在 `briefing_config.example.json` 中；密钥放在 GitHub Secrets 或本地 `.env` 中。
+
+`briefing_config.json` 示例：
+
+```json
+{
+  "sources": {
+    "36氪": "https://36kr.com/feed",
+    "少数派": "https://sspai.com/feed",
+    "IT之家": "https://www.ithome.com/rss/"
+  },
+  "selection": {
+    "limit_per_source": 15,
+    "top_n": 10
+  },
+  "history": {
+    "file": "utils/history.txt",
+    "capacity": 500
+  },
+  "output": {
+    "dir": "每日简报",
+    "prefix": "精选简报",
+    "title": "自动化科技简报"
+  },
+  "style": {
+    "role": "专业科技新闻分析助手",
+    "advice_label": "技术观察",
+    "audience": "关注科技与产业动态的读者",
+    "tone": "客观、克制、少口号，优先事实和可执行建议"
+  }
+}
+```
+
+### 环境变量
 
 | 变量名 | 是否必填 | 说明 |
 |---|---|---|
 | `GEMINI_API_KEY` | 是 | Gemini API Key |
 | `GEMINI_MODEL` | 否 | Gemini 模型名，默认 `gemini-2.5-flash` |
+| `BRIEFING_CONFIG_FILE` | 否 | JSON 配置文件路径，默认 `briefing_config.json` |
+| `BRIEFING_SOURCES_JSON` | 否 | 覆盖默认 RSS 源，格式为 JSON 对象，例如 `{"来源":"https://example.com/feed.xml"}` |
+| `BRIEFING_LIMIT_PER_SOURCE` | 否 | 每个 RSS 源最多抓取条数，默认 `15` |
+| `BRIEFING_TOP_N` | 否 | Gemini 精选输出条数，默认 `10` |
+| `BRIEFING_HISTORY_FILE` | 否 | 历史去重文件路径，默认 `utils/history.txt` |
+| `BRIEFING_HISTORY_CAPACITY` | 否 | 历史链接保留上限，默认 `500` |
+| `BRIEFING_OUTPUT_DIR` | 否 | 日报输出目录，默认 `每日简报` |
+| `BRIEFING_REPORT_PREFIX` | 否 | 日报文件名后缀，默认 `精选简报` |
+| `BRIEFING_REPORT_TITLE` | 否 | Markdown 顶部标题，默认 `自动化科技简报` |
+| `BRIEFING_STYLE_ROLE` | 否 | Gemini 角色设定，默认 `专业科技新闻分析助手` |
+| `BRIEFING_ADVICE_LABEL` | 否 | 建议字段名称，默认 `技术观察` |
+| `BRIEFING_AUDIENCE` | 否 | 目标读者，默认 `关注科技与产业动态的读者` |
+| `BRIEFING_TONE` | 否 | 输出语气要求，默认偏客观克制 |
 
 ---
 
 ## 输出说明
 
-默认输出为 Markdown 文件，保留当前项目已有的个人化表达风格，例如“统帅”“统帅锦囊”等。
+默认输出为 Markdown 文件，采用中性开源风格，不再绑定“统帅”“战报”等个人化称呼；角色、建议字段、目标读者和语气都可以通过配置文件调整。
 
-归档文件头部会写入生成时间，正文通常为 Gemini 生成的精选摘要；若 Gemini 失败，则会退化为基础信息版 fallback 简报。
+归档文件头部会写入生成时间，正文通常为 Gemini 生成的精选摘要。生成后的 Markdown 会经过基础格式校验，重点检查情报标题、原文链接和固定字段；若 Gemini 失败或输出严重不合格，则会退化为基础信息版 fallback 简报。
 
-为了保持公开仓库简洁，当前仓库默认只保留 1 份示例日报用于展示；实际运行后，系统会继续按日期目录自动生成新的日报文件。
+当前仓库采用“源码 + 产物同仓库”策略，历史日报会随着工作流持续累积。若后续日报数量继续增长，可以再迁移到独立产物仓库、`gh-pages` 或静态站展示层。
 
 示例路径：
 
@@ -266,9 +327,10 @@ utils/history.txt
 ## 当前限制
 
 - 依赖 RSS 源质量，源站摘要不完整时会影响输入质量。
-- 摘要风格默认偏个人化，暂未做完整模板系统。
+- Gemini 摘要仍未做事实核验，当前只做格式和链接层面的质量门禁。
+- 摘要风格已改为中性默认值，并支持通过配置文件调整，但还不是完整模板系统。
 - 目前抓取和分析流程仍是串行的，优先保证简单可维护。
-- 还没有补充自动化测试。
+- RSS 抓取已有源级失败隔离，但还没有做并行抓取、缓存和更细粒度的内容正文抽取。
 
 ---
 
@@ -279,6 +341,8 @@ utils/history.txt
 - [x] 历史去重
 - [x] Gemini 摘要生成
 - [x] 失败重试与 fallback 简报
+- [x] 运行配置化
+- [x] 日报格式质量门禁
 - [ ] 扩展更多 RSS / 信息源
 - [ ] 支持飞书推送
 - [ ] 支持 Telegram / 邮件推送

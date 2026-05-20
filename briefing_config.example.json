@@ -1,0 +1,26 @@
+{
+  "sources": {
+    "36氪": "https://36kr.com/feed",
+    "少数派": "https://sspai.com/feed",
+    "IT之家": "https://www.ithome.com/rss/"
+  },
+  "selection": {
+    "limit_per_source": 15,
+    "top_n": 10
+  },
+  "history": {
+    "file": "utils/history.txt",
+    "capacity": 500
+  },
+  "output": {
+    "dir": "每日简报",
+    "prefix": "精选简报",
+    "title": "自动化科技简报"
+  },
+  "style": {
+    "role": "专业科技新闻分析助手",
+    "advice_label": "技术观察",
+    "audience": "关注科技与产业动态的读者",
+    "tone": "客观、克制、少口号，优先事实和可执行建议"
+  }
+}

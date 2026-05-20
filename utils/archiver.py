@@ -12,6 +12,7 @@ class ArchiveMaster:
         content: str,
         output_dir: str = "每日简报",
         prefix: str = "精选简报",
+        report_title: str = "自动化科技简报",
     ) -> str:
         """按现有日期目录结构归档生成后的日报。"""
 
@@ -20,7 +21,7 @@ class ArchiveMaster:
         target_dir.mkdir(parents=True, exist_ok=True)
 
         full_path = target_dir / f"{now.strftime('%Y-%m-%d')}-{prefix}.md"
-        header = f"# 🤖 {now.strftime('%Y-%m-%d %H:%M')} 自动化战报\n\n"
+        header = f"# {now.strftime('%Y-%m-%d %H:%M')} {report_title}\n\n"
         full_path.write_text(header + content, encoding="utf-8")
 
         return str(full_path)

@@ -1,6 +1,7 @@
 __pycache__/
 *.py[cod]
 .env
+briefing_config.json
 .venv/
 venv/
 

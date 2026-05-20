@@ -3,46 +3,51 @@
 from __future__ import annotations
 
 import os
-from typing import Final
 
 from dotenv import load_dotenv
 
 from utils.analyst import GeminiChief
 from utils.archiver import ArchiveMaster
+from utils.config import load_config
 from utils.collector import IntelligenceCollector
 from utils.memory import MemoryBank
 
 load_dotenv()
 
-DEFAULT_SOURCES: Final[dict[str, str]] = {
-    "36氪": "https://36kr.com/feed",
-    "少数派": "https://sspai.com/feed",
-    "IT之家": "https://www.ithome.com/rss/",
-}
-DEFAULT_HISTORY_FILE: Final[str] = "utils/history.txt"
-DEFAULT_HISTORY_CAPACITY: Final[int] = 500
-DEFAULT_MODEL: Final[str] = os.getenv("GEMINI_MODEL") or "gemini-2.5-flash"
-DEFAULT_OUTPUT_DIR: Final[str] = "每日简报"
-DEFAULT_REPORT_PREFIX: Final[str] = "精选简报"
-
 
 def run_daily_briefing() -> int:
     """抓取新内容、生成日报并完成归档。"""
+
+    try:
+        config = load_config()
+    except ValueError as error:
+        print(f"配置错误：{error}")
+        return 1
 
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         print("错误：未找到 GEMINI_API_KEY，请检查本地 .env 或 GitHub Secrets。")
         return 1
 
-    collector = IntelligenceCollector(DEFAULT_SOURCES)
+    collector = IntelligenceCollector(config.sources)
     memory = MemoryBank(
-        history_file=DEFAULT_HISTORY_FILE,
-        max_capacity=DEFAULT_HISTORY_CAPACITY,
+        history_file=config.history_file,
+        max_capacity=config.history_capacity,
     )
-    analyst = GeminiChief(api_key=api_key, model=DEFAULT_MODEL)
+    analyst = GeminiChief(
+        api_key=api_key,
+        model=config.model,
+        top_n=config.top_n,
+        style_guide={
+            "role": config.style_role,
+            "advice_label": config.advice_label,
+            "audience": config.audience,
+            "tone": config.tone,
+        },
+    )
 
     print("正在抓取 RSS 源...")
-    raw_items = collector.scan()
+    raw_items = collector.scan(limit_per_source=config.limit_per_source)
 
     fresh_items = [item for item in raw_items if memory.is_new(item["url"])]
     new_links = [item["url"] for item in fresh_items]
@@ -56,13 +61,14 @@ def run_daily_briefing() -> int:
 
     archived_path = ArchiveMaster.store(
         report,
-        output_dir=DEFAULT_OUTPUT_DIR,
-        prefix=DEFAULT_REPORT_PREFIX,
+        output_dir=config.output_dir,
+        prefix=config.report_prefix,
+        report_title=config.report_title,
     )
     memory.update(new_links)
 
     print(f"日报已归档到：{archived_path}")
-    print(f"历史记录已更新，最多保留最近 {DEFAULT_HISTORY_CAPACITY} 条链接。")
+    print(f"历史记录已更新，最多保留最近 {config.history_capacity} 条链接。")
     return 0
 
 

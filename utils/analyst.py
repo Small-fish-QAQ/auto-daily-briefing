@@ -7,9 +7,13 @@ from typing import Final
 
 from google import genai
 
+from utils.validator import ReportValidator
+
 DEFAULT_STYLE_GUIDE: Final[dict[str, str]] = {
-    "role": "统帅的首席情报官",
-    "advice_label": "统帅锦囊",
+    "role": "专业科技新闻分析助手",
+    "advice_label": "技术观察",
+    "audience": "软件工程学生和技术从业者",
+    "tone": "客观、克制、少口号，优先事实和可执行建议",
 }
 DEFAULT_RETRY_DELAYS: Final[tuple[int, ...]] = (15, 45, 90)
 RETRYABLE_STATUS_CODES: Final[set[int]] = {429, 500, 502, 503, 504}
@@ -37,18 +41,27 @@ class GeminiChief:
         self,
         api_key: str,
         model: str = "gemini-2.5-flash",
+        top_n: int = 10,
         style_guide: dict[str, str] | None = None,
         retry_delays: tuple[int, ...] = DEFAULT_RETRY_DELAYS,
     ):
         self.client = genai.Client(api_key=api_key)
         self.model = model
+        self.top_n = top_n
         self.style_guide = DEFAULT_STYLE_GUIDE | (style_guide or {})
         self.retry_delays = retry_delays
         self.max_attempts = len(retry_delays) + 1
 
     def _build_package(self, intel_list: list[dict[str, str]]) -> str:
         return "\n\n".join(
-            f"[{item['origin']}] {item['title']}\n{item['digest'][:300]}\nLink: {item['url']}"
+            "\n".join(
+                [
+                    f"[{item['origin']}] {item['title']}",
+                    f"发布时间：{item.get('published') or '未知'}",
+                    f"摘要：{item['digest'][:300]}",
+                    f"Link: {item['url']}",
+                ]
+            )
             for item in intel_list
         )
 
@@ -56,12 +69,22 @@ class GeminiChief:
         package = self._build_package(intel_list)
         advice_label = self.style_guide["advice_label"]
         role = self.style_guide["role"]
+        audience = self.style_guide["audience"]
+        tone = self.style_guide["tone"]
+        expected_count = min(self.top_n, len(intel_list))
 
         return (
-            f"你是{role}。请从以下 {len(intel_list)} 条情报中精选 Top 10 进行深度研判：\n\n"
+            f"你是{role}。请从以下 {len(intel_list)} 条候选情报中精选 "
+            f"Top {expected_count} 进行深度研判，目标读者是{audience}。"
+            f"整体语气要求：{tone}。\n\n"
             f"{package}\n\n"
             "--- 最高指令 ---\n"
-            "请你必须严格按照以下 Markdown 格式输出每一条情报，**绝对不可漏掉原文链接**：\n\n"
+            "只输出日报正文，不要写开场白、总结、署名或解释。\n"
+            "禁止使用私人称呼、军政化称谓或强拟人化汇报口吻。\n"
+            f"必须输出 {expected_count} 条；如果候选不足该数量，则输出全部候选。\n"
+            "每条情报只能对应一个候选来源，禁止把多个候选合并成同一条。\n"
+            "必须保留原文 Link，且标题行只能包含一个 Markdown 链接。\n"
+            "请你必须严格按照以下 Markdown 格式输出每一条情报：\n\n"
             "**[情报X] [{情报标题}]({原文Link})**\n"
             "* **[核心事实]**：一句话概括核心事件。\n"
             "* **[行业内参]**：深度分析行业影响与趋势。\n"
@@ -140,12 +163,34 @@ class GeminiChief:
                 [
                     f"### [{index}] {item['title']}",
                     f"- 来源：{item['origin']}",
+                    f"- 发布时间：{item.get('published') or '未知'}",
+                    f"- 摘要：{item['digest'][:180]}",
                     f"- 原文链接：{item['url']}",
                     "",
                 ]
             )
 
         return "\n".join(lines).rstrip() + "\n"
+
+    def _validate_summary(self, summary: str, intel_count: int) -> str:
+        # 这层只做格式门禁，不做事实核验；事实核验需要额外的信息源校对流程。
+        expected_count = min(self.top_n, intel_count)
+        validation = ReportValidator.validate(
+            summary,
+            expected_count=expected_count,
+            advice_label=self.style_guide["advice_label"],
+        )
+
+        for warning in validation.warnings:
+            print(f"[Report] 格式警告：{warning}")
+
+        if validation.errors:
+            error_text = "；".join(validation.errors[:3])
+            if len(validation.errors) > 3:
+                error_text += f"；另有 {len(validation.errors) - 3} 个问题"
+            raise RuntimeError(f"Gemini 输出格式不合格：{error_text}")
+
+        return validation.normalized_content
 
     def summarize(self, intel_list: list[dict[str, str]]) -> str:
         if not intel_list:
@@ -158,6 +203,7 @@ class GeminiChief:
             try:
                 print(f"[Gemini] 正在进行第 {attempt}/{self.max_attempts} 次摘要请求...")
                 summary = self._request_summary(prompt)
+                summary = self._validate_summary(summary, intel_count=len(intel_list))
                 if attempt > 1:
                     print(f"[Gemini] 第 {attempt} 次请求成功，继续生成正式日报。")
                 return summary
