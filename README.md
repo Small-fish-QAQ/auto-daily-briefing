@@ -34,6 +34,19 @@
 ├─ .github/
 │  └─ workflows/
 │     └─ daily_briefing.yml
+├─ docs/
+│  ├─ CODEX_WORKFLOW.md
+│  └─ DEVELOPMENT.md
+├─ tests/
+│  ├─ fixtures/
+│  ├─ test_archiver.py
+│  ├─ test_collector.py
+│  ├─ test_config.py
+│  ├─ test_filter.py
+│  ├─ test_memory.py
+│  ├─ test_pytest_validator.py
+│  ├─ test_smoke_imports.py
+│  └─ test_validator.py
 ├─ utils/
 │  ├─ analyst.py
 │  ├─ archiver.py
@@ -52,6 +65,8 @@
 ├─ LICENSE
 ├─ main.py
 ├─ README.md
+├─ pyproject.toml
+├─ requirements-dev.txt
 └─ requirements.txt
 ```
 
@@ -192,6 +207,25 @@ python main.py
 ```text
 utils/history.txt
 ```
+
+### 5. 开发者测试
+
+```bash
+python -m pip install -r requirements.txt
+python -m pip install -r requirements-dev.txt
+python -m ruff check .
+python -m ruff format --check .
+python -m pytest
+```
+
+测试不会请求 Gemini，也不会访问外部 RSS。
+
+GitHub Actions 会先运行 `quality` job，执行 ruff 和 pytest；通过后才会进入日报生成 job。
+
+更多维护说明见：
+
+- [开发者说明](docs/DEVELOPMENT.md)
+- [Codex 协作说明](docs/CODEX_WORKFLOW.md)
 
 ## 为什么适合部署在 GitHub Actions
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 from typing import Iterable
 
 
@@ -46,13 +47,31 @@ class MemoryBank:
     def _write_history(self, links: Iterable[str]) -> None:
         """将历史记录写回磁盘。"""
 
-        directory = os.path.dirname(self.history_file)
-        if directory:
-            os.makedirs(directory, exist_ok=True)
+        target_path = os.path.abspath(self.history_file)
+        directory = os.path.dirname(target_path)
+        os.makedirs(directory, exist_ok=True)
 
-        with open(self.history_file, "w", encoding="utf-8") as file:
-            for link in links:
-                file.write(f"{link}\n")
+        temp_path = ""
+        try:
+            with tempfile.NamedTemporaryFile(
+                "w",
+                encoding="utf-8",
+                dir=directory,
+                prefix=f".{os.path.basename(target_path)}.",
+                suffix=".tmp",
+                delete=False,
+            ) as file:
+                temp_path = file.name
+                for link in links:
+                    file.write(f"{link}\n")
+                file.flush()
+                os.fsync(file.fileno())
+
+            os.replace(temp_path, target_path)
+        except Exception:
+            if temp_path and os.path.exists(temp_path):
+                os.remove(temp_path)
+            raise
 
     def _refresh_state(self, links: list[str]) -> None:
         """在每次更新后同步内存中的列表和集合状态。"""
@@ -63,7 +82,10 @@ class MemoryBank:
     def is_new(self, link: str) -> bool:
         """判断链接是否为未出现过的新内容。"""
 
-        return link not in self.history_set
+        normalized_link = link.strip()
+        if not normalized_link:
+            return False
+        return normalized_link not in self.history_set
 
     def update(self, new_links: Iterable[str]) -> None:
         """追加新链接、裁剪容量，并同步内存状态。"""

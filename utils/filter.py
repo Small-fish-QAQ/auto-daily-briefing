@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from difflib import SequenceMatcher
 from typing import Final
 
-
 BASE_SCORE: Final[int] = 10
 INCLUDE_KEYWORD_SCORE: Final[int] = 4
 EXCLUDE_KEYWORD_PENALTY: Final[int] = 5

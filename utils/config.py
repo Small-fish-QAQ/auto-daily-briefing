@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-
 DEFAULT_SOURCES: Final[dict[str, str]] = {
     "36氪": "https://36kr.com/feed",
     "少数派": "https://sspai.com/feed",
@@ -236,7 +235,7 @@ def _env_text(name: str, default: str) -> str:
 
 def _normalize_sources(value: object, source_name: str) -> dict[str, str]:
     if not isinstance(value, dict):
-        raise ValueError(f"{source_name} 必须是对象，格式如 {{\"来源名\":\"RSS_URL\"}}。")
+        raise ValueError(f'{source_name} 必须是对象，格式如 {{"来源名":"RSS_URL"}}。')
 
     sources: dict[str, str] = {}
     for name, url in value.items():

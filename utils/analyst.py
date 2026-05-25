@@ -218,9 +218,7 @@ class GeminiChief:
 
                 if has_next_attempt and self._should_retry(error):
                     wait_seconds = self.retry_delays[attempt - 1]
-                    print(
-                        f"[Gemini] 判定为可重试错误，将在 {wait_seconds} 秒后发起下一次请求。"
-                    )
+                    print(f"[Gemini] 判定为可重试错误，将在 {wait_seconds} 秒后发起下一次请求。")
                     time.sleep(wait_seconds)
                     continue
 

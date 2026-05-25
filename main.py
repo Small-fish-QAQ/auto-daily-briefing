@@ -8,8 +8,8 @@ from dotenv import load_dotenv
 
 from utils.analyst import GeminiChief
 from utils.archiver import ArchiveMaster
-from utils.config import load_config
 from utils.collector import IntelligenceCollector
+from utils.config import load_config
 from utils.filter import FilterConfig, NewsFilter
 from utils.memory import MemoryBank
 

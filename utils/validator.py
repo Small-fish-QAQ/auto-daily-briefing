@@ -6,7 +6,6 @@ import re
 from dataclasses import dataclass
 from typing import Final
 
-
 SPACED_LINK_RE: Final[re.Pattern[str]] = re.compile(r"\]\s+\((https?://[^)]+)\)")
 HEADING_RE: Final[re.Pattern[str]] = re.compile(
     r"^\*\*\[情报(\d+)\]\s+(.+?)\*\*$",
@@ -56,7 +55,9 @@ class ReportValidator:
             line = heading.group(0)
             links = LINK_RE.findall(line)
             item_number = heading.group(1)
-            section_end = headings[index + 1].start() if index + 1 < len(headings) else len(normalized)
+            section_end = (
+                headings[index + 1].start() if index + 1 < len(headings) else len(normalized)
+            )
             section = normalized[heading.start() : section_end]
 
             if not links:

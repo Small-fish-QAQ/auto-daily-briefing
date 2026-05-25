@@ -10,7 +10,6 @@ from typing import Final
 
 import feedparser
 
-
 DEFAULT_TIMEOUT_SECONDS: Final[int] = 20
 DEFAULT_USER_AGENT: Final[str] = (
     "News-Briefing/0.2 (+https://github.com/Small-fish-QAQ/auto-daily-briefing)"
@@ -82,8 +81,7 @@ class IntelligenceCollector:
                         "title": self._clean_text(getattr(entry, "title", "Untitled")),
                         "digest": self._clean_text(getattr(entry, "summary", "No summary")),
                         "published": self._clean_text(
-                            getattr(entry, "published", "")
-                            or getattr(entry, "updated", "")
+                            getattr(entry, "published", "") or getattr(entry, "updated", "")
                         ),
                         "url": link,
                     }
