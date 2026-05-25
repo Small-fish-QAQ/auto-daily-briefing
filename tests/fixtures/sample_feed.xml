@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Fixture Feed</title>
+    <link>https://example.com/</link>
+    <description>Local RSS fixture for collector tests</description>
+    <item>
+      <title>AI &amp; Tools Update</title>
+      <link>https://example.com/news/1</link>
+      <description><![CDATA[<p>Hello&nbsp;<strong>world</strong></p>]]></description>
+      <pubDate>Mon, 25 May 2026 08:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>
